@@ -1,0 +1,23 @@
+<routes>
+    <vType id="AV" vClass="passenger" accel="3.0" decel="6.0" sigma="0.5" length="5" minGap="2.5" maxSpeed="16.67" color="1,0,0">
+        <param key="has.btreceiver.device" value="true"/>
+    </vType>
+    <vType id="non_AV" vClass="passenger" accel="2.6" decel="4.5" sigma="0.5" length="5" minGap="2.5" maxSpeed="16.67" color="0,1,0"/>
+
+    <route id="route_we" edges="E0 E5"/>
+    <route id="route_ew" edges="E1 E4"/>
+    <route id="route_ns" edges="E2 E7"/>
+    <route id="route_sn" edges="E3 E6"/>
+
+    <flow id="flow_we_av" type="AV" route="route_we" begin="0" end="3600" probability="0.05"/>
+    <flow id="flow_we_non_av" type="non_AV" route="route_we" begin="0" end="3600" probability="0.2"/>
+
+    <flow id="flow_ew_av" type="AV" route="route_ew" begin="0" end="3600" probability="0.05"/>
+    <flow id="flow_ew_non_av" type="non_AV" route="route_ew" begin="0" end="3600" probability="0.2"/>
+
+    <flow id="flow_ns_av" type="AV" route="route_ns" begin="0" end="3600" probability="0.025"/>
+    <flow id="flow_ns_non_av" type="non_AV" route="route_ns" begin="0" end="3600" probability="0.1"/>
+
+    <flow id="flow_sn_av" type="AV" route="route_sn" begin="0" end="3600" probability="0.025"/>
+    <flow id="flow_sn_non_av" type="non_AV" route="route_sn" begin="0" end="3600" probability="0.1"/>
+</routes>

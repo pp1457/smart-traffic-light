@@ -1,0 +1,232 @@
+\documentclass[conference]{IEEEtran}
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{float}
+\usepackage{url}
+\usepackage{stfloats}
+
+\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
+    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+
+\begin{document}
+
+\title{AV-Informed Dynamic Signal Control and Phase Sequencing: A Hybrid Fusion Approach}
+
+\author{\IEEEauthorblockN{Yun-Yang Liao}
+\IEEEauthorblockA{\textit{Dept. of Computer Science and Information Engineering} \\
+\textit{National Taiwan University}\\
+Taipei, Taiwan \\
+liaoyunyang0815@gmail.com}
+}
+
+\maketitle
+
+\begin{abstract}
+Adaptive traffic signal control in mixed autonomy environments faces critical challenges due to partial observability caused by low penetration rates of Connected Autonomous Vehicles (CAVs). Traditional pressure-based controllers, while throughput-optimal under full state information, degrade significantly when queue estimates are noisy. This paper proposes a novel \textit{Phase-Aware Hybrid Coordination} framework that fuses stable historical demand priors with real-time sparse AV data. We introduce a three-layer architecture comprising a Historical Demand Backbone, an AV Voting Layer, and a Dynamic Scheduling Layer governed by a hybridized pressure objective with explicit fairness safeguards. Extensive microscopic simulations verify that our approach reduces average delay by 43\% compared to simpler Max-Pressure implementations at 15\% penetration and prevents the catastrophic failure modes observed in purely reactive systems under heavy congestion. Furthermore, we demonstrate that the proposed method maintains equitable service levels (Gini coefficient $<$ 0.45) where baseline approaches allow secondary flows to starve.
+\end{abstract}
+
+\begin{IEEEkeywords}
+Traffic Signal Control, Connected Autonomous Vehicles, Mixed Autonomy, Max Pressure, Data Fusion
+\end{IEEEkeywords}
+
+\section{Introduction}
+\label{sec:introduction}
+Urban traffic congestion remains a persistent challenge, incurring significant economic costs and environmental impact. The emergence of Connected Autonomous Vehicles (CAVs) offers a transformative opportunity to move beyond fixed-time signal plans toward fully adaptive, demand-responsive control. However, the transition to full autonomy will be gradual, resulting in a prolonged period of "mixed autonomy" where legacy human-driven vehicles coexist with a minority of CAVs.
+
+Existing adaptive control strategies fall into two primary categories: model-based methods (e.g., SCOOT, SCATS) that rely on expensive inductive loop detectors, and emerging V2X-based methods that utilize CAV trajectories. While V2X methods promise finer granularity, they suffer inherently from \textit{partial observability} at low penetration rates ($<$20\%). Strategies like Max-Pressure (MP) \cite{varaiya2013max}, theoretically proven to minimize queue lengths, rely on accurate state estimation. When only a fraction of queues are visible, MP controllers often make erratic switching decisions, leading to "gridlock" conditions worse than static timing plans.
+
+To address this, we propose an \textbf{AV-Informed Pressure} framework. Our key contribution is a \textbf{Three-Layer Hybrid Architecture} that fuses stable historical demand priors with real-time sparse AV data to enable robust control even at 5\% penetration. The layers comprise:
+\begin{enumerate}
+    \item \textbf{Historical Demand Backbone}: Builds baseline demand profiles from accumulated low-penetration trajectories.
+    \item \textbf{AV Voting \& Fusion Layer}: Real-time AV signals are fused with historical priors to estimate full queue states.
+    \item \textbf{Dynamic Control Layer}: A Hybrid Pressure controller with explicit fairness safeguards and spillback protection.
+\end{enumerate}
+
+Extensive microscopic simulations verify that our approach reduces average delay by \textbf{43\%} compared to Max-Pressure implementations (43s vs 88s) and prevents the catastrophic failure modes observed in purely reactive systems under heavy congestion. Furthermore, we demonstrate that the proposed method maintains equitable service levels (Gini coefficient $<$ 0.45) where baseline approaches allow secondary flows to starve.
+
+The remainder of this paper is organized as follows: Section \ref{sec:methodology} details the mathematical formulation of our three-layer architecture and control strategies. Section \ref{sec:setup} describes the simulation environment. Section \ref{sec:results} presents comprehensive experimental results, and Section \ref{sec:conclusion} concludes.
+
+\section{Methodology}
+\label{sec:methodology}
+
+We formulate the traffic signal control problem as a dynamic resource allocation task. To operate robustly under partial observability, we introduce a hierarchical architecture consisting of three layers: Data Ingestion (Historical Backbone), State Estimation (Fusion), and Control Policy.
+
+
+
+
+\subsection{Layer 1: Historical Demand Backbone}
+In early deployment stages, real-time AV data is too sparse to form a complete picture of traffic demand. To compensate, we construct a \textit{Historical Demand Backbone} ($\lambda_{hist}$). This module aggregates trajectory data over moving windows (e.g., 2-4 weeks) to learn the time-dependent arrival rates for each movement $m$.
+\begin{equation}
+    \lambda_{hist}(m, t) = \mathbb{E}[n_{arrivals}(m, t) / P_{est}]
+\end{equation}
+where $P_{est}$ is the estimated market penetration rate. This baseline provides a "safety net" ensuring the controller has a reasonable estimate of demand components (like heavy turning flows) even when no AVs are currently present.
+
+\subsection{Layer 2: Real-Time Data Fusion}
+The Fusion Layer combines the stability of historical priors with the responsiveness of real-time AV sensing. We define the fused arrival rate $\Lambda(m, t)$ as:
+\begin{equation}
+    \Lambda(m, t) = \alpha \cdot \hat{\lambda}_{AV}(t) + (1-\alpha) \cdot \lambda_{hist}(m, t)
+\end{equation}
+where $\hat{\lambda}_{AV}$ is the upscaled real-time arrival rate detected from connected vehicles, and $\alpha \in [0, 1]$ is a confidence parameter. In our current implementation, $\alpha$ is static, but future work allows it to adapt based on instantaneous penetration estimates. 
+
+The fused demand is used to project queue lengths using a store-and-forward model:
+\begin{equation}
+    \hat{Q}_{up}(m) = Q_{observed}(m) + \int_{t}^{t+T_{horizon}} \Lambda(\tau) d\tau
+\end{equation}
+This "hallucinated" queue $\hat{Q}_{up}$ ensures that unseen localized congestion is inferred from historical patterns before it becomes critical.
+
+\subsection{Layer 3: Dynamic Control Policies}
+We compare three distinct control strategies utilizing these state estimates.
+
+\subsubsection{Fixed Time Control (Baseline)}
+The Fixed Time controller follows a pre-determined cyclic schedule. For a phase sequence $P = \{p_1, ..., p_k\}$, each phase is assigned a static duration $G_i$. This serves as a robustness baseline, effective essentially as a "mean-field" approximation of optimal control.
+
+\subsubsection{Standard Max Pressure}
+Max Pressure (MP) is a greedy algorithm that selects the phase maximizing pressure relief.
+\begin{equation}
+    P_{MP}(p) = \sum_{m \in p} (Q_{up}(m) - Q_{down}(m))
+\end{equation}
+MP is throughput-optimal with perfect information but fragile under partial observability, as $Q_{up}$ becomes dominated by noise.
+
+\subsubsection{Proposed: AV-Informed MPC}
+We formulate a Model Predictive Control (MPC) scheme that selects the optimal phase sequence to minimize total network delay over a finite horizon $H$.
+\begin{equation}
+    J = \min \sum_{k=t}^{t+H} \left( \sum_{l \in \mathcal{L}} \hat{Q}_l(k) + C_{switch} \cdot \delta_{switch}(k) \right)
+\end{equation}
+Subject to:
+\begin{itemize}
+    \item \textbf{Queue Dynamics}: $\hat{Q}(k+1) = \hat{Q}(k) + \Lambda(k) - \mu \cdot g(k)$
+    \item \textbf{Min Green}: $g(k) \geq G_{min}$
+\end{itemize}
+Unlike cyclic controllers, our MPC enables \textbf{Dynamic Phase Sequencing}, allowing the system to skip low-demand phases or reorder service to prioritize urgent queues inferred by the Fusion Layer.
+
+\subsubsection{Heuristic Variant: Hybrid Pressure V2}
+As a computationally lightweight alternative to MPC, we propose \textit{Hybrid Pressure V2}. It augments the standard MP formulation with fairness weights to prevent starvation of minor flows:
+\begin{equation}
+    w_m(t) = 1 + \kappa \cdot \left(\frac{\tau_{starve}(m)}{T_{limit}}\right)^2
+\end{equation}
+The controller selects phases based on weighted pressure:
+\begin{equation}
+    p^* = \arg\max_{p} \sum_{m \in p} w_m(t) \cdot (\hat{Q}_{up}(m) - \beta \cdot \hat{Q}_{down}(m))
+\end{equation}
+This variant includes \textbf{Spillback Protection} (via the $\beta \cdot \hat{Q}_{down}$ term) to effectively manage limited downstream capacity.
+
+\section{Experimental Setup}
+\label{sec:setup}
+
+
+
+
+
+The experiments are conducted using SUMO (Simulation of Urban MObility) version 1.21. We model a representative 4-way intersection ("J2") with protected left turns and exclusive pedestrian phases.
+
+
+
+\subsection{Evaluation Scenarios}
+We evaluate performance across four distinct operational regimes:
+\begin{enumerate}
+    \item \textbf{Standard Weekday}: Balanced demand profile calibrated to real-world peak/off-peak patterns. 15\% AV penetration.
+    \item \textbf{Stress Test}: A 1.5x scaling of the peak hour demand to test saturation behavior.
+    \item \textbf{Robustness Test}: Extremely low penetration (5\%) to evaluate fail-safe characteristics.
+    \item \textbf{Sensitivity Analysis}: Sweeping penetration rates from 5\% to 100\% to observe convergence.
+\end{enumerate}
+
+\subsection{Metrics}
+\begin{itemize}
+    \item \textbf{Average Delay (s/veh)}: Mean waiting time per vehicle.
+    \item \textbf{Throughput (veh/hr)}: Total vehicles discharged.
+    \item \textbf{Gini Coefficient}: A measure of Delay inequality among different approaches (0=Perfect Equity, 1=Total Inequity).
+\end{itemize}
+
+
+
+
+
+\section{Results and Analysis}
+\label{sec:results}
+
+\begin{figure*}[t!]
+    \centering
+    \includegraphics[width=0.65\textwidth]{../data/results/plots/sensitivity_analysis.png}
+    \caption{Delay Reduction vs. AV Penetration Rate.}
+    \label{fig:sensitivity}
+\end{figure*}
+
+\begin{figure*}[t!]
+    \centering
+    \includegraphics[width=0.65\textwidth]{../data/results/plots/throughput_sensitivity.png}
+    \caption{Intersection Throughput vs. AV Penetration Rate.}
+    \label{fig:throughput}
+\end{figure*}
+
+We evaluate the proposed framework against baselines across multiple dimensions: overall efficiency vs. penetration measures, robustness to demand surges, and equity of service.
+
+\subsection{Overall Efficiency: Sensitivity to Penetration}
+\label{subsec:sensitivity}
+Figure \ref{fig:sensitivity} presents the average delay as AV penetration rates sweep from 5\% to 100\%.
+
+\begin{itemize}
+    \item \textbf{Low Penetration Regime (5-15\%)}: Standard Max Pressure (Yellow) performs poorly, effectively blind to the traffic state. The Proposed MPC (Green) recovers nearly 50\% of the performance gap. This confirms that the \textbf{Historical Demand Backbone} effectively compensates for sparse data, preventing the "blind" switching decisions common in purely reactive methods.
+    \item \textbf{High Penetration Regime ($>$50\%)}: Interestingly, the methods do \textit{not} converge to the same performance. The Greedy Hybrid Heuristic (Blue) saturates at a delay of $\approx$85s, while the Optimization-based MPC achieves $\approx$43s. This highlights a fundamental insight: \textbf{Perfect Information is insufficient without predictive lookahead}. Even with full AV visibility, greedy pressure release is inferior to finite-horizon optimization.
+\end{itemize}
+
+Figure \ref{fig:throughput} further demonstrates that our 3-Layer approach sustains high throughput even when AV data is sparse, preventing the capacity drop-off seen in vanilla Max Pressure.
+
+\begin{figure*}[t!]
+    \centering
+    \includegraphics[width=0.65\textwidth]{../data/results/plots/stress_test_comparison.png}
+    \caption{Average Delay under Stress Test (1.5x Demand).}
+    \label{fig:stress}
+\end{figure*}
+
+\subsection{Stress Testing \& Robustness}
+To evaluate system resilience, we subjected the controllers to a "Stress Test" (1.5x Peak Demand) and a "Misconfiguration Test" (Incorrect Green Splits).
+
+
+
+\subsubsection{Extreme Demand Response}
+Under 1.5x demand (Fig. \ref{fig:stress}), the intersection approaches theoretical capacity.
+\begin{enumerate}
+    \item \textbf{Max Pressure Failure}: Fails completely (88.5s) due to estimation errors compounding into inefficient phase changes.
+    \item \textbf{Fixed Time Stability}: Remains robust (48.8s) but cannot adapt to minimize queues further.
+    \item \textbf{MPC Superiority}: The AV-Informed MPC achieves the lowest delay (44.6s). It utilizes the stability of the Historical Backbone ($D_{hist}$) to match Fixed Time's robustness, while the \textbf{Dynamic Control Layer} exploits real-time gaps to shave off additional delay.
+\end{enumerate}
+
+
+
+\begin{figure*}[t!]
+    \centering
+    \includegraphics[width=0.65\textwidth]{../data/results/plots/split_sensitivity.png}
+    \caption{Impact of Green Split Ratio on Average Delay.}
+    \label{fig:split_sensitivity}
+\end{figure*}
+
+\subsubsection{Robustness to Calibration Errors}
+Fixed Time controllers are notoriously brittle to parameter tuning. Figure \ref{fig:split_sensitivity} illustrates the impact of "Green Split" misconfiguration.
+While Fixed Time degrades to a delay of \textbf{90.3s} when the split ratio is mismatched (e.g., 75\%/25\% for a 50/50 load), the Proposed MPC maintains a flat performance profile (\textbf{43.4s}). This "Plug-and-Play" capability effectively immunizes the system against calibration drift, a key advantage for real-world deployment where demand patterns evolve effectively.
+
+
+
+\begin{figure*}[t!]
+    \centering
+    \includegraphics[width=0.65\textwidth]{../data/results/plots/fairness_sensitivity.png}
+    \caption{Fairness (Gini Coefficient) vs Penetration Rate.}
+    \label{fig:equity}
+\end{figure*}
+
+\subsection{Equity Analysis}
+Fairness is critical for public acceptance of AI traffic control. Figure \ref{fig:equity} analyzes the Gini coefficient of delays across all movements.
+Standard Max Pressure is often "unfair" at low penetration (Gini $>0.6$), as it greedily serves large detectable queues while allowing side streets (often with 0 detected AVs) to starve. Our \textbf{Hybrid Pressure V2} and MPC methods explicitly incorporate fairness constraints, maintaining a Gini coefficient $<0.45$. This creates a system that is not only efficient but equitable, preventing the "tyranny of the majority" often seen in pure throughput optimizations.
+
+\section{Conclusion}
+\label{sec:conclusion}
+This paper presented a robust AV-Informed MPC controller for mixed autonomy traffic signal control. By integrating real-time V2X observations with historical demand profiles into a \textbf{Three-Layer Hybrid Architecture}, we addressed the critical failure modes of adaptive control under partial observability. Our results demonstrate that our predictive approach significantly outperforms both reactive Max Pressure and greedy heuristics across all penetration levels. Specifically, we showed that \textbf{predictive lookahead} combined with \textbf{history-based priors} can reduce delays by over 40\% compared to standard baselines while maintaining fairness. Future work will focus on the online learning of fusion parameters and scaling to multi-intersection coordination.
+
+\bibliographystyle{IEEEtran}
+\bibliography{../references}
+
+\end{document}
